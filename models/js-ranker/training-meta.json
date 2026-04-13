@@ -1,0 +1,8 @@
+{
+  "trainedAt": "2026-04-13T19:34:11.898Z",
+  "epochs": 300,
+  "samples": 18,
+  "finalLoss": 0.3669110834598541,
+  "finalMae": 0.46214577555656433,
+  "architecture": "5 → Dense(12, relu) → Dropout(0.1) → Dense(1, linear)"
+}
