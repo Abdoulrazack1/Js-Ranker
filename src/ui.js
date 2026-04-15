@@ -135,11 +135,27 @@ function displayResult(score, details, filename = 'fonction') {
   console.log(colorize(`  ├${'─'.repeat(width)}┤`));
 
   const f = details;
+  // Features originales (F1–F5)
   console.log(colorize('  │') + formatFeatureRow('Complexité Cyclo.', f.cyclomaticComplexity.normalized, true) + colorize('│'));
   console.log(colorize('  │') + formatFeatureRow('Imbrication Max.', f.maxNesting.normalized, true) + colorize('│'));
   console.log(colorize('  │') + formatFeatureRow('Ratio Nommage', f.namingRatio.normalized, false) + colorize('│'));
   console.log(colorize('  │') + formatFeatureRow('Linéarité', f.linearity.normalized, false) + colorize('│'));
   console.log(colorize('  │') + formatFeatureRow('Modularité', f.modularity.normalized, false) + colorize('│'));
+
+  // Nouvelles features (F6–F10) si disponibles
+  if (f.commentRatio !== undefined) {
+    console.log(colorize(`  ├${'─'.repeat(width)}┤`));
+    console.log(colorize('  │') + chalk.white.bold('  Métriques Avancées'.padEnd(width)) + colorize('│'));
+    console.log(colorize(`  ├${'─'.repeat(width)}┤`));
+    console.log(colorize('  │') + formatFeatureRow('Ratio Commentaires', f.commentRatio.normalized, false) + colorize('│'));
+    console.log(colorize('  │') + formatFeatureRow('Complexité Retours', f.returnComplexity.normalized, true) + colorize('│'));
+    const asyncLabel = f.asyncAwait.hasAsync && f.asyncAwait.hasAwait
+      ? 'Async/Await ✓'
+      : f.asyncAwait.hasAsync || f.asyncAwait.hasAwait ? 'Async partiel' : 'Async/Await';
+    console.log(colorize('  │') + formatFeatureRow(asyncLabel, f.asyncAwait.normalized, false) + colorize('│'));
+    console.log(colorize('  │') + formatFeatureRow('Nombres Magiques', f.magicNumbers.normalized, true) + colorize('│'));
+    console.log(colorize('  │') + formatFeatureRow('Longueur Chaînes', f.chainLength.normalized, true) + colorize('│'));
+  }
 
   // ── Valeurs brutes ───────────────────────────────────
   console.log(colorize(`  ├${'─'.repeat(width)}┤`));
@@ -154,15 +170,33 @@ function displayResult(score, details, filename = 'fonction') {
     `  Nb. paramètres    : ${chalk.white(f.modularity.params)}`,
   ];
 
+  if (f.commentRatio !== undefined) {
+    raw.push(`  Lignes commentaires: ${chalk.white(f.commentRatio.comments)} / ${f.commentRatio.lines}`);
+    raw.push(`  Return statements  : ${chalk.white(f.returnComplexity.count)}`);
+    raw.push(`  Async/Await        : ${f.asyncAwait.hasAsync ? chalk.green('async ✓') : chalk.gray('—')}  ${f.asyncAwait.hasAwait ? chalk.green('await ✓') : chalk.gray('—')}`);
+    raw.push(`  Nombres magiques   : ${chalk.white(f.magicNumbers.count)}`);
+    raw.push(`  Chaîne méth. max   : ${chalk.white(f.chainLength.max)} niveaux`);
+  }
+
   for (const line of raw) {
     console.log(colorize('  │') + chalk.gray(line.padEnd(width)) + colorize('│'));
   }
 
-  // ── Conseil ─────────────────────────────────────────
+  // ── Conseils de refactoring enrichis ────────────────
   console.log(colorize(`  ├${'─'.repeat(width)}┤`));
-  const advice = getAdvice(score, details);
-  console.log(colorize('  │') + chalk.white.bold('  Conseil'.padEnd(width)) + colorize('│'));
-  console.log(colorize('  │') + chalk.gray(`  ${advice}`.padEnd(width)) + colorize('│'));
+  console.log(colorize('  │') + chalk.white.bold('  Conseils de Refactoring'.padEnd(width)) + colorize('│'));
+  console.log(colorize(`  ├${'─'.repeat(width)}┤`));
+
+  const advices = getDetailedAdvice(score, details);
+  const icons   = ['🔧', '💡', '📌'];
+  advices.forEach((adv, idx) => {
+    const prefix = `  ${icons[idx] || '•'} ${adv.msg}`;
+    console.log(colorize('  │') + chalk.gray(prefix.substring(0, width).padEnd(width)) + colorize('│'));
+    if (adv.tip) {
+      const tipLine = `      ↳ ${adv.tip}`;
+      console.log(colorize('  │') + chalk.gray(tipLine.substring(0, width).padEnd(width)) + colorize('│'));
+    }
+  });
 
   console.log(colorize('  │') + ''.padEnd(width) + colorize('│'));
   console.log(colorize(`  └${border}┘`));
@@ -175,24 +209,119 @@ function displayResult(score, details, filename = 'fonction') {
 function getAdvice(score, details) {
   if (score >= 4.5) return 'Code exemplaire. Excellent travail ! 🎉';
 
-  // Trouver la feature la plus problématique
   const issues = [];
 
+  // ── Features originales ──────────────────────────────
   if (details.cyclomaticComplexity.normalized > 0.5)
-    issues.push({ priority: details.cyclomaticComplexity.normalized, msg: 'Réduire les conditions imbriquées → Guard clauses' });
+    issues.push({
+      priority: details.cyclomaticComplexity.normalized,
+      msg:      'Réduire les conditions imbriquées → Guard clauses & early return',
+      tip:      `${details.cyclomaticComplexity.raw} branches logiques détectées`,
+    });
   if (details.maxNesting.normalized > 0.5)
-    issues.push({ priority: details.maxNesting.normalized, msg: 'Aplatir les blocs imbriqués → Extract function' });
+    issues.push({
+      priority: details.maxNesting.normalized,
+      msg:      'Aplatir les blocs imbriqués → Extraire en sous-fonctions',
+      tip:      `Profondeur max : ${details.maxNesting.raw} niveaux`,
+    });
   if (details.namingRatio.normalized < 0.5)
-    issues.push({ priority: 1 - details.namingRatio.normalized, msg: 'Renommer les variables : a, b, x → noms explicites' });
+    issues.push({
+      priority: 1 - details.namingRatio.normalized,
+      msg:      'Renommer les variables : a, b, x → noms explicites et sémantiques',
+      tip:      `Seulement ${details.namingRatio.named}/${details.namingRatio.total} variables bien nommées`,
+    });
   if (details.modularity.normalized < 0.4)
-    issues.push({ priority: 1 - details.modularity.normalized, msg: 'Trop d\'arguments → Utiliser un objet paramètre' });
+    issues.push({
+      priority: 1 - details.modularity.normalized,
+      msg:      'Trop d\'arguments → Regrouper en un objet options/config',
+      tip:      `${details.modularity.params} paramètres (idéal : ≤ 3)`,
+    });
   if (details.linearity.normalized < 0.4)
-    issues.push({ priority: 1 - details.linearity.normalized, msg: 'Déséquilibre code/structure → Restructurer les blocs' });
+    issues.push({
+      priority: 1 - details.linearity.normalized,
+      msg:      'Déséquilibre code/structure → Restructurer en blocs lisibles',
+      tip:      `Ratio lignes/nœuds = ${details.linearity.ratio} (idéal ≈ 1.5)`,
+    });
+
+  // ── Nouvelles features ───────────────────────────────
+  if (details.commentRatio && details.commentRatio.normalized < 0.1 && score < 3.5)
+    issues.push({
+      priority: 0.4,
+      msg:      'Ajouter des commentaires JSDoc → documenter les paramètres & retours',
+      tip:      `Aucun commentaire détecté pour ${details.commentRatio.lines} lignes de code`,
+    });
+  if (details.returnComplexity && details.returnComplexity.normalized > 0.6)
+    issues.push({
+      priority: details.returnComplexity.normalized * 0.9,
+      msg:      'Trop de points de sortie → Unifier les return en fin de fonction',
+      tip:      `${details.returnComplexity.count} return statements (idéal : 1–3)`,
+    });
+  if (details.magicNumbers && details.magicNumbers.normalized > 0.3)
+    issues.push({
+      priority: details.magicNumbers.normalized * 0.85,
+      msg:      'Nommer les constantes magiques → const MAX_RETRY = 3 au lieu de 3',
+      tip:      `${details.magicNumbers.count} nombres magiques détectés`,
+    });
+  if (details.chainLength && details.chainLength.normalized > 0.5)
+    issues.push({
+      priority: details.chainLength.normalized * 0.8,
+      msg:      'Chaîne de méthodes trop longue → Décomposer en variables intermédiaires',
+      tip:      `Chaîne de ${details.chainLength.max} appels enchaînés`,
+    });
 
   if (issues.length === 0) return 'Bon code. Quelques ajustements mineurs suffiraient.';
 
   issues.sort((a, b) => b.priority - a.priority);
-  return issues[0].msg;
+
+  // Retourne le conseil principal + le tip contextuel
+  const top = issues[0];
+  return `${top.msg}  (${top.tip})`;
+}
+
+/**
+ * Retourne jusqu'à 3 conseils détaillés, triés par priorité.
+ * Utilisé pour l'affichage enrichi multi-conseils.
+ */
+function getDetailedAdvice(score, details) {
+  if (score >= 4.5) return [{ msg: 'Code exemplaire. Excellent travail ! 🎉', tip: '' }];
+
+  const issues = [];
+
+  if (details.cyclomaticComplexity.normalized > 0.4)
+    issues.push({ priority: details.cyclomaticComplexity.normalized,
+      msg: 'Guard clauses → réduire la complexité cyclomatique',
+      tip: `${details.cyclomaticComplexity.raw} branches logiques` });
+  if (details.maxNesting.normalized > 0.4)
+    issues.push({ priority: details.maxNesting.normalized,
+      msg: 'Extract function → aplatir l\'imbrication',
+      tip: `profondeur ${details.maxNesting.raw}` });
+  if (details.namingRatio.normalized < 0.6)
+    issues.push({ priority: 1 - details.namingRatio.normalized,
+      msg: 'Nommage explicite → renommer les variables courtes',
+      tip: `${details.namingRatio.named}/${details.namingRatio.total} bien nommées` });
+  if (details.modularity.normalized < 0.5)
+    issues.push({ priority: 1 - details.modularity.normalized,
+      msg: 'Objet options → réduire le nombre d\'arguments',
+      tip: `${details.modularity.params} paramètres` });
+  if (details.commentRatio && details.commentRatio.normalized < 0.1 && score < 3.5)
+    issues.push({ priority: 0.4,
+      msg: 'JSDoc → documenter les paramètres et valeurs de retour',
+      tip: `0 commentaires / ${details.commentRatio.lines} lignes` });
+  if (details.magicNumbers && details.magicNumbers.normalized > 0.3)
+    issues.push({ priority: details.magicNumbers.normalized * 0.85,
+      msg: 'Constantes nommées → remplacer les nombres magiques',
+      tip: `${details.magicNumbers.count} littéraux numériques` });
+  if (details.returnComplexity && details.returnComplexity.normalized > 0.6)
+    issues.push({ priority: details.returnComplexity.normalized * 0.9,
+      msg: 'Unifier les return → réduire les points de sortie',
+      tip: `${details.returnComplexity.count} return statements` });
+  if (details.chainLength && details.chainLength.normalized > 0.5)
+    issues.push({ priority: details.chainLength.normalized * 0.8,
+      msg: 'Variables intermédiaires → décomposer les chaînes de méthodes',
+      tip: `chaîne de ${details.chainLength.max} appels` });
+
+  issues.sort((a, b) => b.priority - a.priority);
+  return issues.slice(0, 3).length > 0 ? issues.slice(0, 3) : [{ msg: 'Code propre. Quelques ajustements mineurs suffiraient.', tip: '' }];
 }
 
 // ─────────────────────────────────────────────────────────
@@ -335,4 +464,4 @@ function displayFileReport(report, filename = 'fichier') {
   console.log('');
 }
 
-module.exports = { displayResult, displayBanner, displayError, displayFileReport, displayFetchInfo, getVerdict };
+module.exports = { displayResult, displayBanner, displayError, displayFileReport, displayFetchInfo, getVerdict, getAdvice, getDetailedAdvice };

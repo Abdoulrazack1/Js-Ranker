@@ -1,0 +1,197 @@
+# ╔══════════════════════════════════════════════════════════════╗
+# ║         JS-RANKER — GitHub Actions CI/CD                     ║
+# ║                                                              ║
+# ║   Déclenché sur : push main/develop, pull requests           ║
+# ║   Jobs :                                                     ║
+# ║     1. lint-and-analyze  — Analyse qualité avec JS-Ranker    ║
+# ║     2. train-and-test    — Entraînement + vérification MAE   ║
+# ║     3. quality-gate      — Bloque si score global < seuil    ║
+# ╚══════════════════════════════════════════════════════════════╝
+
+name: JS-Ranker Quality Gate
+
+on:
+  push:
+    branches: [main, develop]
+  pull_request:
+    branches: [main]
+
+# Scores minimaux requis pour passer le gate (sur 5.0)
+env:
+  MIN_SCORE_WARN:  2.5   # En dessous → warning
+  MIN_SCORE_FAIL:  1.8   # En dessous → échec du CI
+
+jobs:
+  # ── Job 1 : Analyse de qualité JS-Ranker ──────────────────────
+  analyze:
+    name: 🧠 JS-Ranker Quality Analysis
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Train model (if no saved model)
+        run: |
+          if [ ! -f models/js-ranker/model.json ]; then
+            echo "🧠 Aucun modèle trouvé — entraînement..."
+            node migrate-dataset.js
+            npm run train
+          else
+            echo "✓ Modèle existant trouvé"
+          fi
+
+      - name: Analyze changed JS files
+        id: analyze
+        run: |
+          # Récupère les fichiers JS modifiés (hors node_modules, tests)
+          CHANGED=$(git diff --name-only ${{ github.event.before }} ${{ github.sha }} \
+            2>/dev/null | grep '\.js$' | grep -v 'node_modules\|\.min\.\|\.test\.' || true)
+
+          if [ -z "$CHANGED" ]; then
+            echo "Aucun fichier JS modifié — analyse des examples/"
+            CHANGED="examples/perfect.js examples/average.js examples/spaghetti.js"
+          fi
+
+          echo "Fichiers analysés :"
+          echo "$CHANGED"
+
+          MIN_SCORE=5.0
+          SCORES_JSON="["
+          FIRST=true
+
+          for FILE in $CHANGED; do
+            if [ -f "$FILE" ]; then
+              echo ""
+              echo "📄 $FILE"
+              SCORE=$(node index.js analyze "$FILE" 2>/dev/null | grep -oP '\d+\.\d+(?= / 5)' | head -1 || echo "3.0")
+              echo "   Score : $SCORE / 5.0"
+
+              if [ "$FIRST" = "true" ]; then FIRST=false; else SCORES_JSON="$SCORES_JSON,"; fi
+              SCORES_JSON="$SCORES_JSON{\"file\":\"$FILE\",\"score\":$SCORE}"
+
+              # Garde le score minimum
+              if (( $(echo "$SCORE < $MIN_SCORE" | bc -l) )); then MIN_SCORE=$SCORE; fi
+            fi
+          done
+
+          SCORES_JSON="$SCORES_JSON]"
+
+          echo "min_score=$MIN_SCORE"       >> $GITHUB_OUTPUT
+          echo "scores=$SCORES_JSON"        >> $GITHUB_OUTPUT
+
+      - name: Quality Gate Decision
+        id: gate
+        run: |
+          MIN="${{ steps.analyze.outputs.min_score }}"
+          FAIL_THRESHOLD=${{ env.MIN_SCORE_FAIL }}
+          WARN_THRESHOLD=${{ env.MIN_SCORE_WARN }}
+
+          echo ""
+          echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+          echo "  🏁 Quality Gate Results"
+          echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+          echo "  Score minimum   : $MIN / 5.0"
+          echo "  Seuil warning   : $WARN_THRESHOLD / 5.0"
+          echo "  Seuil échec     : $FAIL_THRESHOLD / 5.0"
+          echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+
+          if (( $(echo "$MIN < $FAIL_THRESHOLD" | bc -l) )); then
+            echo ""
+            echo "❌ QUALITY GATE FAILED — Score $MIN < $FAIL_THRESHOLD"
+            echo "   Refactorisez le code avant de merger."
+            echo "gate_status=failed" >> $GITHUB_OUTPUT
+            exit 1
+          elif (( $(echo "$MIN < $WARN_THRESHOLD" | bc -l) )); then
+            echo ""
+            echo "⚠️  QUALITY GATE WARNING — Score $MIN < $WARN_THRESHOLD"
+            echo "   Le code passe mais mérite d'être amélioré."
+            echo "gate_status=warning" >> $GITHUB_OUTPUT
+          else
+            echo ""
+            echo "✅ QUALITY GATE PASSED — Score $MIN ≥ $WARN_THRESHOLD"
+            echo "gate_status=passed" >> $GITHUB_OUTPUT
+          fi
+
+      - name: Post PR Comment
+        if: github.event_name == 'pull_request'
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const scores   = JSON.parse('${{ steps.analyze.outputs.scores }}');
+            const minScore = ${{ steps.analyze.outputs.min_score }};
+            const status   = '${{ steps.gate.outputs.gate_status }}';
+
+            const statusEmoji = status === 'passed' ? '✅' : status === 'warning' ? '⚠️' : '❌';
+            const statusText  = status === 'passed' ? 'PASSÉ' : status === 'warning' ? 'AVERTISSEMENT' : 'ÉCHOUÉ';
+
+            let table = '| Fichier | Score | Verdict |\n|---|---|---|\n';
+            for (const s of scores) {
+              const v = s.score >= 4.5 ? 'ÉLÉGANT' : s.score >= 3.5 ? 'ROBUSTE'
+                      : s.score >= 2.5 ? 'CORRECT' : s.score >= 1.8 ? 'BROUILLON' : 'CRITIQUE';
+              const e = s.score >= 4.0 ? '🟢' : s.score >= 2.5 ? '🟡' : '🔴';
+              table += `| \`${s.file}\` | ${e} **${s.score} / 5.0** | ${v} |\n`;
+            }
+
+            const body = `## ${statusEmoji} JS-Ranker Quality Gate — ${statusText}
+
+            ${table}
+            **Score minimum :** ${minScore} / 5.0
+            > Seuils : ✅ ≥ 2.5 | ⚠️ 1.8–2.5 | ❌ < 1.8
+
+            _Analysé par [JS-Ranker](https://github.com/${{ github.repository }}) v2.1_`;
+
+            github.rest.issues.createComment({
+              issue_number: context.issue.number,
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              body,
+            });
+
+  # ── Job 2 : Entraînement & vérification MAE ──────────────────
+  train-check:
+    name: 🔬 Model Training Check
+    runs-on: ubuntu-latest
+    # Ne lance que sur push vers main (pas sur chaque PR)
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+
+      - run: npm ci
+
+      - name: Migrate dataset & retrain
+        run: |
+          node migrate-dataset.js
+          npm run train 2>&1 | tee train.log
+
+      - name: Check MAE threshold
+        run: |
+          MAE=$(grep -oP 'MAE finale\s*:\s*\K[\d.]+' train.log | tail -1)
+          echo "MAE finale : $MAE"
+          if (( $(echo "$MAE > 0.8" | bc -l) )); then
+            echo "❌ MAE trop élevée ($MAE > 0.8) — dataset insuffisant ?"
+            exit 1
+          fi
+          echo "✅ MAE acceptable : $MAE ≤ 0.8"
+
+      - name: Upload trained model
+        uses: actions/upload-artifact@v4
+        with:
+          name: js-ranker-model
+          path: models/js-ranker/
+          retention-days: 30

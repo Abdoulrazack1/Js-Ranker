@@ -1,58 +1,25 @@
 {
-  "version": "2.1",
-  "description": "JS-Ranker Training Dataset — Fonctions JS annotées avec notes humaines de qualité — 10 features AST",
+  "version": "1.0",
+  "description": "JS-Ranker Training Dataset — Fonctions JS annotées avec notes humaines de qualité",
   "schema": {
-    "features": [
-      "cyclomaticComplexity",
-      "maxNesting",
-      "namingRatio",
-      "linearity",
-      "modularity",
-      "commentRatio",
-      "returnComplexity",
-      "asyncAwait",
-      "magicNumbers",
-      "chainLength"
-    ],
+    "features": ["cyclomaticComplexity", "maxNesting", "namingRatio", "linearity", "modularity"],
     "label": "score (0.0 à 5.0)"
   },
   "samples": [
     {
       "id": "perfect_001",
       "label": "Fonction pure, nommage excellent, complexité zéro",
-      "score": 5,
+      "score": 5.0,
       "code": "function calculateTotalPrice(items, taxRate) {\n  return items.reduce((total, item) => total + item.price * (1 + taxRate), 0);\n}",
-      "features": [
-        0,
-        0.125,
-        1,
-        0.7273,
-        0.7143,
-        0,
-        0.125,
-        0,
-        0,
-        0.1667
-      ],
+      "features": [0.05, 0.1, 1.0, 0.9, 0.8],
       "verdict": "ELEGANT"
     },
     {
       "id": "perfect_002",
       "label": "Arrow function lisible, paramètres clairs",
-      "score": 5,
+      "score": 5.0,
       "code": "const filterActiveUsers = (users) => users.filter(user => user.isActive && user.emailVerified);",
-      "features": [
-        0.05,
-        0,
-        1,
-        0.7125,
-        0.8571,
-        0,
-        0,
-        0,
-        0,
-        0.1667
-      ],
+      "features": [0.05, 0.05, 1.0, 0.95, 0.95],
       "verdict": "ELEGANT"
     },
     {
@@ -60,18 +27,7 @@
       "label": "Fonction avec guard clauses propres",
       "score": 4.8,
       "code": "function getUserDisplayName(user) {\n  if (!user) return 'Anonymous';\n  if (!user.firstName) return user.email;\n  return `${user.firstName} ${user.lastName}`.trim();\n}",
-      "features": [
-        0.1,
-        0.125,
-        1,
-        0.7357,
-        0.8571,
-        0,
-        0.375,
-        0,
-        0,
-        0.1667
-      ],
+      "features": [0.2, 0.15, 0.9, 0.85, 0.9],
       "verdict": "ELEGANT"
     },
     {
@@ -79,18 +35,7 @@
       "label": "Composition de fonctions, nommage sémantique",
       "score": 4.9,
       "code": "const formatCurrency = (amount, currency = 'EUR') =>\n  new Intl.NumberFormat('fr-FR', { style: 'currency', currency }).format(amount);",
-      "features": [
-        0,
-        0,
-        1,
-        0.719,
-        0.7143,
-        0,
-        0,
-        0,
-        0,
-        0.1667
-      ],
+      "features": [0.05, 0.1, 1.0, 0.9, 0.85],
       "verdict": "ELEGANT"
     },
     {
@@ -98,37 +43,15 @@
       "label": "Destructuring propre, logique claire",
       "score": 4.7,
       "code": "function parseApiResponse({ data, status, message }) {\n  if (status !== 200) throw new Error(message);\n  return data.map(({ id, name, createdAt }) => ({ id, name, createdAt }));\n}",
-      "features": [
-        0.05,
-        0.125,
-        0.5,
-        0.725,
-        0.8571,
-        0,
-        0.125,
-        0,
-        0.1,
-        0.1667
-      ],
+      "features": [0.15, 0.2, 0.95, 0.85, 0.8],
       "verdict": "ELEGANT"
     },
     {
       "id": "clean_001",
       "label": "Logique métier correcte, légèrement dense",
-      "score": 4,
+      "score": 4.0,
       "code": "function validateForm(formData) {\n  const errors = [];\n  if (!formData.email || !formData.email.includes('@')) {\n    errors.push('Email invalide');\n  }\n  if (!formData.password || formData.password.length < 8) {\n    errors.push('Mot de passe trop court');\n  }\n  return { isValid: errors.length === 0, errors };\n}",
-      "features": [
-        0.2,
-        0.375,
-        1,
-        0.7392,
-        0.8571,
-        0,
-        0.125,
-        0,
-        0.1,
-        0.1667
-      ],
+      "features": [0.25, 0.3, 0.85, 0.75, 0.85],
       "verdict": "ROBUST"
     },
     {
@@ -136,18 +59,7 @@
       "label": "Boucle for classique, nommage ok",
       "score": 3.8,
       "code": "function buildMenuItems(routes, userRole) {\n  const menuItems = [];\n  for (const route of routes) {\n    if (route.roles && route.roles.includes(userRole)) {\n      menuItems.push({ label: route.label, path: route.path });\n    }\n  }\n  return menuItems;\n}",
-      "features": [
-        0.15,
-        0.625,
-        1,
-        0.7462,
-        0.7143,
-        0,
-        0.125,
-        0,
-        0,
-        0.1667
-      ],
+      "features": [0.3, 0.35, 0.8, 0.7, 0.8],
       "verdict": "ROBUST"
     },
     {
@@ -155,18 +67,7 @@
       "label": "Switch statement lisible, nommage correct",
       "score": 3.6,
       "code": "function getStatusColor(status) {\n  switch (status) {\n    case 'active': return '#22c55e';\n    case 'pending': return '#f59e0b';\n    case 'error': return '#ef4444';\n    case 'disabled': return '#6b7280';\n    default: return '#000000';\n  }\n}",
-      "features": [
-        0.25,
-        0.125,
-        1,
-        0.7692,
-        0.8571,
-        0,
-        0.625,
-        0,
-        0,
-        0
-      ],
+      "features": [0.4, 0.25, 0.75, 0.7, 0.9],
       "verdict": "ROBUST"
     },
     {
@@ -174,18 +75,7 @@
       "label": "Nommage paresseux, logique imbriquée",
       "score": 2.5,
       "code": "function process(data1, data2, flag) {\n  let result = [];\n  if (flag) {\n    for (let i = 0; i < data1.length; i++) {\n      if (data1[i] > 0) {\n        result.push(data1[i] * data2);\n      } else {\n        result.push(0);\n      }\n    }\n  }\n  return result;\n}",
-      "features": [
-        0.15,
-        0.875,
-        1,
-        0.752,
-        0.5714,
-        0,
-        0.125,
-        0,
-        0,
-        0.1667
-      ],
+      "features": [0.5, 0.55, 0.3, 0.5, 0.55],
       "verdict": "MESSY"
     },
     {
@@ -193,18 +83,7 @@
       "label": "Trop d'arguments, logique éparpillée",
       "score": 2.3,
       "code": "function handleUser(u, t, d, r, s) {\n  if (r > 0) {\n    if (t === 'admin') {\n      if (s) {\n        return d ? u.name : u.email;\n      }\n    }\n  }\n  return null;\n}",
-      "features": [
-        0.2,
-        0.875,
-        0,
-        0.7645,
-        0.2857,
-        0,
-        0.25,
-        0,
-        0,
-        0
-      ],
+      "features": [0.55, 0.6, 0.2, 0.4, 0.1],
       "verdict": "MESSY"
     },
     {
@@ -212,37 +91,15 @@
       "label": "Variables temp, logique conditionnelle dense",
       "score": 2.7,
       "code": "function calcScore(items) {\n  let temp = 0;\n  let count = 0;\n  for (let i = 0; i < items.length; i++) {\n    if (items[i].active) {\n      temp += items[i].value;\n      count++;\n    }\n  }\n  return count > 0 ? temp / count : 0;\n}",
-      "features": [
-        0.15,
-        0.625,
-        1,
-        0.744,
-        0.8571,
-        0,
-        0.125,
-        0,
-        0,
-        0
-      ],
+      "features": [0.45, 0.45, 0.35, 0.55, 0.9],
       "verdict": "MESSY"
     },
     {
       "id": "average_004",
       "label": "Switch imbriqué, responsabilités mixtes",
-      "score": 2,
+      "score": 2.0,
       "code": "function doThing(x, y, z, mode, opts) {\n  let res;\n  switch (mode) {\n    case 1:\n      if (x > y) {\n        res = x - y;\n      } else { res = y - x; }\n      break;\n    case 2:\n      res = z ? x * z : y;\n      break;\n    default:\n      res = 0;\n  }\n  return res + (opts ? opts.offset || 0 : 0);\n}",
-      "features": [
-        0.35,
-        0.5,
-        0.8333,
-        0.7516,
-        0.2857,
-        0,
-        0.125,
-        0,
-        0,
-        0
-      ],
+      "features": [0.6, 0.65, 0.4, 0.45, 0.3],
       "verdict": "MESSY"
     },
     {
@@ -250,18 +107,7 @@
       "label": "Spaghetti classique, nommage inexistant, imbrication profonde",
       "score": 0.5,
       "code": "function f(a,b,c,d,e,f) {\n  let x=0;\n  for(let i=0;i<a.length;i++) {\n    for(let j=0;j<b.length;j++) {\n      if(a[i]>0) {\n        if(b[j]>0) {\n          if(c) {\n            for(let k=0;k<d.length;k++) {\n              if(d[k]===a[i]) {\n                x+=e?a[i]*b[j]:b[j];\n              } else {\n                if(f>0) { x-=1; } else { x+=0.5; }\n              }\n            }\n          }\n        }\n      }\n    }\n  }\n  return x;\n}",
-      "features": [
-        0.45,
-        1,
-        0,
-        0.7389,
-        0.1429,
-        0,
-        0.125,
-        0,
-        0.1,
-        0
-      ],
+      "features": [0.95, 0.95, 0.05, 0.1, 0.0],
       "verdict": "CRITICAL"
     },
     {
@@ -269,18 +115,7 @@
       "label": "Une seule fonction monstre, tout mélangé",
       "score": 0.8,
       "code": "function run(d,t,m,p,q,r) {\n  var res=[];\n  var tmp=0;\n  var flag=false;\n  for(var i=0;i<100;i++) {\n    if(d[i]) {\n      if(t==='a') {\n        if(m>0) {\n          tmp=d[i]*m;\n          if(tmp>p) {\n            for(var j=0;j<q.length;j++) {\n              if(q[j]===tmp) {\n                flag=true;\n              }\n            }\n          }\n        }\n      }\n      if(flag) { res.push(tmp*r); }\n    }\n  }\n  return res;\n}",
-      "features": [
-        0.4,
-        1,
-        0.0769,
-        0.7479,
-        0.1429,
-        0,
-        0.125,
-        0,
-        0,
-        0.1667
-      ],
+      "features": [0.9, 0.85, 0.1, 0.15, 0.05],
       "verdict": "CRITICAL"
     },
     {
@@ -288,18 +123,7 @@
       "label": "Code procédural dense, aucune séparation de responsabilités",
       "score": 1.2,
       "code": "function mega(a,b,c,d) {\n  var x=0,y=0,z=[];\n  if(a) { if(a.length>0) { x=a[0]; y=a[1]||0; } }\n  if(b) { for(var i=0;i<b.length;i++) { if(b[i]>x) { z.push(b[i]); } else { if(b[i]<y) { z.push(-b[i]); } } } }\n  if(c>0 && d) { return z.map(function(n){return n*c;}); }\n  return z;\n}",
-      "features": [
-        0.45,
-        1,
-        0.5,
-        0.7132,
-        0.8571,
-        0,
-        0.375,
-        0,
-        0,
-        0.1667
-      ],
+      "features": [0.8, 0.75, 0.15, 0.2, 0.2],
       "verdict": "CRITICAL"
     },
     {
@@ -307,18 +131,7 @@
       "label": "Variables globales implicites, logique imprévisible",
       "score": 1.5,
       "code": "function compute(arr, n, o, p, q, r, s) {\n  let result = 0;\n  for (let i = 0; i < arr.length; i++) {\n    if (arr[i] % 2 === 0) {\n      if (n > 0) {\n        result += arr[i] * n;\n        if (o) {\n          for (let j = i; j < arr.length; j++) {\n            result -= arr[j] * p;\n          }\n        }\n      } else {\n        result += arr[i] / (q || 1);\n      }\n    } else if (r) {\n      result += s ? arr[i] * s : arr[i];\n    }\n  }\n  return result;\n}",
-      "features": [
-        0.4,
-        1,
-        0.0476,
-        0.7396,
-        0,
-        0,
-        0.125,
-        0,
-        0,
-        0
-      ],
+      "features": [0.75, 0.7, 0.2, 0.25, 0.1],
       "verdict": "CRITICAL"
     },
     {
@@ -326,18 +139,7 @@
       "label": "Logique ok mais imbrication évitable",
       "score": 3.2,
       "code": "function fetchUserData(userId, includeProfile, includeOrders) {\n  const queryParams = [];\n  if (userId) {\n    if (includeProfile) {\n      queryParams.push('profile=true');\n    }\n    if (includeOrders) {\n      queryParams.push('orders=true');\n    }\n  }\n  return `/api/users/${userId}?${queryParams.join('&')}`;\n}",
-      "features": [
-        0.15,
-        0.625,
-        1,
-        0.76,
-        0.5714,
-        0,
-        0.125,
-        0,
-        0,
-        0.1667
-      ],
+      "features": [0.35, 0.4, 0.7, 0.65, 0.65],
       "verdict": "ROBUST"
     },
     {
@@ -345,18 +147,7 @@
       "label": "Bonnes intentions, légèrement verbeux",
       "score": 3.5,
       "code": "function groupByCategory(productList) {\n  const grouped = {};\n  for (const product of productList) {\n    const category = product.category || 'uncategorized';\n    if (!grouped[category]) {\n      grouped[category] = [];\n    }\n    grouped[category].push(product);\n  }\n  return grouped;\n}",
-      "features": [
-        0.15,
-        0.625,
-        1,
-        0.7512,
-        0.8571,
-        0,
-        0.125,
-        0,
-        0,
-        0.1667
-      ],
+      "features": [0.3, 0.35, 0.75, 0.6, 0.9],
       "verdict": "ROBUST"
     }
   ],
@@ -368,6 +159,5 @@
       "average_2_3": 4,
       "poor_0_2": 4
     }
-  },
-  "migratedAt": "2026-04-14T21:42:40.758Z"
+  }
 }

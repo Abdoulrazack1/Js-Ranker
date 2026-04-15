@@ -2,12 +2,12 @@
   "modelTopology": {
     "class_name": "Sequential",
     "config": {
-      "name": "JSRanker-v2",
+      "name": "JSRanker-v3",
       "layers": [
         {
           "class_name": "Dense",
           "config": {
-            "units": 12,
+            "units": 16,
             "activation": "relu",
             "use_bias": true,
             "kernel_initializer": {
@@ -28,11 +28,11 @@
             "activity_regularizer": null,
             "kernel_constraint": null,
             "bias_constraint": null,
-            "name": "hidden_layer",
+            "name": "hidden_layer_1",
             "trainable": true,
             "batch_input_shape": [
               null,
-              5
+              10
             ],
             "dtype": "float32"
           }
@@ -40,10 +40,38 @@
         {
           "class_name": "Dropout",
           "config": {
-            "rate": 0.1,
+            "rate": 0.15,
             "noise_shape": null,
             "seed": null,
-            "name": "dropout",
+            "name": "dropout_1",
+            "trainable": true
+          }
+        },
+        {
+          "class_name": "Dense",
+          "config": {
+            "units": 8,
+            "activation": "relu",
+            "use_bias": true,
+            "kernel_initializer": {
+              "class_name": "VarianceScaling",
+              "config": {
+                "scale": 2,
+                "mode": "fan_in",
+                "distribution": "normal",
+                "seed": null
+              }
+            },
+            "bias_initializer": {
+              "class_name": "Zeros",
+              "config": {}
+            },
+            "kernel_regularizer": null,
+            "bias_regularizer": null,
+            "activity_regularizer": null,
+            "kernel_constraint": null,
+            "bias_constraint": null,
+            "name": "hidden_layer_2",
             "trainable": true
           }
         },
@@ -87,24 +115,39 @@
       ],
       "weights": [
         {
-          "name": "hidden_layer/kernel",
+          "name": "hidden_layer_1/kernel",
           "shape": [
-            5,
-            12
+            10,
+            16
           ],
           "dtype": "float32"
         },
         {
-          "name": "hidden_layer/bias",
+          "name": "hidden_layer_1/bias",
           "shape": [
-            12
+            16
+          ],
+          "dtype": "float32"
+        },
+        {
+          "name": "hidden_layer_2/kernel",
+          "shape": [
+            16,
+            8
+          ],
+          "dtype": "float32"
+        },
+        {
+          "name": "hidden_layer_2/bias",
+          "shape": [
+            8
           ],
           "dtype": "float32"
         },
         {
           "name": "output_layer/kernel",
           "shape": [
-            12,
+            8,
             1
           ],
           "dtype": "float32"

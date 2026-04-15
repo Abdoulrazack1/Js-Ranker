@@ -1,8 +1,22 @@
 {
-  "trainedAt": "2026-04-13T19:34:11.898Z",
+  "trainedAt": "2026-04-14T21:42:50.581Z",
+  "version": "2.1",
   "epochs": 300,
   "samples": 18,
-  "finalLoss": 0.3669110834598541,
-  "finalMae": 0.46214577555656433,
-  "architecture": "5 → Dense(12, relu) → Dropout(0.1) → Dense(1, linear)"
+  "inputDim": 10,
+  "finalLoss": 0.15133851766586304,
+  "finalMae": 0.3149307668209076,
+  "architecture": "10 → Dense(16, relu) → Dropout(0.15) → Dense(8, relu) → Dense(1, linear)",
+  "features": [
+    "cyclomaticComplexity",
+    "maxNesting",
+    "namingRatio",
+    "linearity",
+    "modularity",
+    "commentRatio",
+    "returnComplexity",
+    "asyncAwait",
+    "magicNumbers",
+    "chainLength"
+  ]
 }
