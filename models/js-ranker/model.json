@@ -2,12 +2,12 @@
   "modelTopology": {
     "class_name": "Sequential",
     "config": {
-      "name": "JSRanker-v3",
+      "name": "JSRanker-v4",
       "layers": [
         {
           "class_name": "Dense",
           "config": {
-            "units": 16,
+            "units": 48,
             "activation": "relu",
             "use_bias": true,
             "kernel_initializer": {
@@ -23,16 +23,22 @@
               "class_name": "Zeros",
               "config": {}
             },
-            "kernel_regularizer": null,
+            "kernel_regularizer": {
+              "class_name": "L1L2",
+              "config": {
+                "l1": 0,
+                "l2": 0.001
+              }
+            },
             "bias_regularizer": null,
             "activity_regularizer": null,
             "kernel_constraint": null,
             "bias_constraint": null,
-            "name": "hidden_layer_1",
+            "name": "hidden_1",
             "trainable": true,
             "batch_input_shape": [
               null,
-              10
+              16
             ],
             "dtype": "float32"
           }
@@ -40,7 +46,7 @@
         {
           "class_name": "Dropout",
           "config": {
-            "rate": 0.15,
+            "rate": 0.2,
             "noise_shape": null,
             "seed": null,
             "name": "dropout_1",
@@ -50,7 +56,51 @@
         {
           "class_name": "Dense",
           "config": {
-            "units": 8,
+            "units": 24,
+            "activation": "relu",
+            "use_bias": true,
+            "kernel_initializer": {
+              "class_name": "VarianceScaling",
+              "config": {
+                "scale": 2,
+                "mode": "fan_in",
+                "distribution": "normal",
+                "seed": null
+              }
+            },
+            "bias_initializer": {
+              "class_name": "Zeros",
+              "config": {}
+            },
+            "kernel_regularizer": {
+              "class_name": "L1L2",
+              "config": {
+                "l1": 0,
+                "l2": 0.001
+              }
+            },
+            "bias_regularizer": null,
+            "activity_regularizer": null,
+            "kernel_constraint": null,
+            "bias_constraint": null,
+            "name": "hidden_2",
+            "trainable": true
+          }
+        },
+        {
+          "class_name": "Dropout",
+          "config": {
+            "rate": 0.1,
+            "noise_shape": null,
+            "seed": null,
+            "name": "dropout_2",
+            "trainable": true
+          }
+        },
+        {
+          "class_name": "Dense",
+          "config": {
+            "units": 12,
             "activation": "relu",
             "use_bias": true,
             "kernel_initializer": {
@@ -71,7 +121,7 @@
             "activity_regularizer": null,
             "kernel_constraint": null,
             "bias_constraint": null,
-            "name": "hidden_layer_2",
+            "name": "hidden_3",
             "trainable": true
           }
         },
@@ -79,7 +129,7 @@
           "class_name": "Dense",
           "config": {
             "units": 1,
-            "activation": "linear",
+            "activation": "sigmoid",
             "use_bias": true,
             "kernel_initializer": {
               "class_name": "VarianceScaling",
@@ -99,7 +149,7 @@
             "activity_regularizer": null,
             "kernel_constraint": null,
             "bias_constraint": null,
-            "name": "output_layer",
+            "name": "output",
             "trainable": true
           }
         }
@@ -115,45 +165,60 @@
       ],
       "weights": [
         {
-          "name": "hidden_layer_1/kernel",
-          "shape": [
-            10,
-            16
-          ],
-          "dtype": "float32"
-        },
-        {
-          "name": "hidden_layer_1/bias",
-          "shape": [
-            16
-          ],
-          "dtype": "float32"
-        },
-        {
-          "name": "hidden_layer_2/kernel",
+          "name": "hidden_1/kernel",
           "shape": [
             16,
-            8
+            48
           ],
           "dtype": "float32"
         },
         {
-          "name": "hidden_layer_2/bias",
+          "name": "hidden_1/bias",
           "shape": [
-            8
+            48
           ],
           "dtype": "float32"
         },
         {
-          "name": "output_layer/kernel",
+          "name": "hidden_2/kernel",
           "shape": [
-            8,
+            48,
+            24
+          ],
+          "dtype": "float32"
+        },
+        {
+          "name": "hidden_2/bias",
+          "shape": [
+            24
+          ],
+          "dtype": "float32"
+        },
+        {
+          "name": "hidden_3/kernel",
+          "shape": [
+            24,
+            12
+          ],
+          "dtype": "float32"
+        },
+        {
+          "name": "hidden_3/bias",
+          "shape": [
+            12
+          ],
+          "dtype": "float32"
+        },
+        {
+          "name": "output/kernel",
+          "shape": [
+            12,
             1
           ],
           "dtype": "float32"
         },
         {
-          "name": "output_layer/bias",
+          "name": "output/bias",
           "shape": [
             1
           ],

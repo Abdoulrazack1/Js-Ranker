@@ -21,6 +21,7 @@ const fs    = require('fs');
 
 const { analyzeFile, analyzeUrl, analyzeSnippet, analyzeAuto, modelExists } = require('./src/analyze');
 const { streamTrain } = require('./src/stream-trainer');
+const { analyzeAndRenderDashboard } = require('./analysis/pipeline');
 
 const program = new Command();
 
@@ -33,27 +34,42 @@ program
 program
   .command('analyze <file>')
   .alias('a')
-  .description('Analyser un fichier JS local (décomposition par fonctions)')
-  .action(async (file) => {
-    await analyzeFile(file);
+  .description('Analyser un fichier JS local (dashboard par défaut, --legacy pour l\'ancienne vue)')
+  .option('--legacy', 'Afficher l\'ancienne UI (décomposition par fonctions)')
+  .action(async (file, opts) => {
+    if (opts.legacy) {
+      await analyzeFile(file);
+    } else {
+      await analyzeAndRenderDashboard(file);
+    }
   });
 
 // ── Analyser une URL (GitHub, GitLab, CDN...) ─────────────────
 program
   .command('url <url>')
   .alias('u')
-  .description('Analyser une URL JavaScript en mémoire (GitHub Raw, CDN, etc.)')
-  .action(async (url) => {
-    await analyzeUrl(url);
+  .description('Analyser une URL JavaScript (dashboard par défaut, --legacy pour l\'ancienne vue)')
+  .option('--legacy', 'Afficher l\'ancienne UI (tableau repo ou fiche fichier)')
+  .action(async (url, opts) => {
+    if (opts.legacy) {
+      await analyzeUrl(url);
+    } else {
+      await analyzeAndRenderDashboard(url);
+    }
   });
 
 // ── Analyser un snippet inline ─────────────────────────────────
 program
   .command('snippet <code>')
   .alias('s')
-  .description('Analyser un snippet de code inline')
-  .action(async (code) => {
-    await analyzeSnippet(code);
+  .description('Analyser un snippet de code inline (dashboard par défaut)')
+  .option('--legacy', 'Afficher l\'ancienne UI')
+  .action(async (code, opts) => {
+    if (opts.legacy) {
+      await analyzeSnippet(code);
+    } else {
+      await analyzeAndRenderDashboard(code);
+    }
   });
 
 // ── Entraînement streaming (dataset distant ou local) ──────────
@@ -127,14 +143,15 @@ program
   });
 
 // ── Raccourcis directs ─────────────────────────────────────────
-// node index.js file.js  →  analyze
-// node index.js https://... →  url
+// node index.js file.js        -> dashboard sur fichier local
+// node index.js https://...    -> dashboard sur URL
 if (process.argv.length === 3 && !process.argv[2].startsWith('-')) {
   const arg = process.argv[2];
-  if (/^https?:\/\//i.test(arg)) {
-    analyzeUrl(arg).catch(err => { console.error(chalk.red('❌', err.message)); process.exit(1); });
-  } else if (arg.endsWith('.js') || fs.existsSync(arg)) {
-    analyzeFile(arg).catch(err => { console.error(chalk.red('❌', err.message)); process.exit(1); });
+  if (/^https?:\/\//i.test(arg) || arg.endsWith('.js') || fs.existsSync(arg)) {
+    analyzeAndRenderDashboard(arg).catch(err => {
+      console.error(chalk.red('❌', err.message));
+      process.exit(1);
+    });
   } else {
     program.parse(process.argv);
   }

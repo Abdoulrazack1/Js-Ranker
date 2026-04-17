@@ -1,0 +1,53 @@
+
+  ┃ JS-RANKER V4  ·  CODE QUALITY ANALYSIS
+
+    3.9 / 5.0  GOOD 
+
+     features.js — primary   6 files reviewed   ~525 lines cleaned   Node.js / acorn AST 
+
+  CRITERIA BREAKDOWN
+
+  NAMING QUALITY                      MODULARITY / SRP                    FUNCTION LENGTH                     
+  ████████████████████████░░                      ███████████████████████░░░                      ███████████████████████░░░                      
+  92% — excellent                     87% — strong                        90% — excellent                     
+  self-documenting names              one metric per visitor              mostly 5-15 lines                   
+
+  MODERN JS USAGE                     CYCLOMATIC CX                       NESTING DEPTH                       
+  ██████████████████████░░░░                      █████████████████████░░░░░                      ███████████████████████░░░                      
+  85% — strong                        82% — strong                        90% — excellent                     
+  sets, spread, ?. used well          dispatch tables flatten if/else     early returns, max depth 2          
+
+  ERROR HANDLING                      PURITY / EFFECTS                    MAINTAINABILITY                     
+  ████████████████████░░░░░░                      ██████████████████░░░░░░░░                      ███████████████████░░░░░░░                      
+  75% — good                          68% — acceptable                    72% — good                          
+  good at boundary, thin inside       visitors mutate shared state        dead param + double walk            
+
+  ┏━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┓   ┏━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┓
+  ┃ STRENGTHS                                       ┃   ┃ WEAKNESSES                                      ┃
+  ┃                                                  ┃   ┃                                                  ┃
+  ┃ • Consistent dispatch-table pattern              ┃   ┃ • computeBaseFeatures(metrics, topMeta,          ┃
+  ┃   (CONTROL_FLOW_ACTIONS, ERROR_HANDLING_DETECTORS, ┃   ┃   nonEmptyLines) never uses nonEmptyLines — dead ┃
+  ┃   FUNCTION_LENGTH_RULES, DECLARATION_KIND_COUNTER) ┃   ┃   parameter left from a refactor; and            ┃
+  ┃   keeps visitor cyclomatic complexity at 1-2     ┃   ┃   extractFeatures computes nonEmptyLines twice   ┃
+  ┃   everywhere.                                    ┃   ┃   (once inside buildFeatureVector, once right    ┃
+  ┃ • Clear tiered decomposition —                   ┃   ┃   after).                                        ┃
+  ┃   buildFeatureVector delegates to                ┃   ┃ • Two separate full-tree AST walks (walk.full in ┃
+  ┃   computeBaseFeatures / computeAdvancedFeatures / ┃   ┃   gatherNodeMetrics + walk.ancestor in           ┃
+  ┃   computeStructuralFeatures by feature family    ┃   ┃   computeMaxNestingDepth) could be a single pass; ┃
+  ┃   (F1-F5, F6-F10, F11-F16), and naming is        ┃   ┃   measureCallChainDepth uses an awkward          ┃
+  ┃   self-documenting end to end.                   ┃   ┃   Array.from({length}).reduce pattern where a    ┃
+  ┃                                                  ┃   ┃   while loop would be clearer.                   ┃
+  ┃                                                  ┃   ┃                                                  ┃
+  ┗━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┛   ┗━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┛
+
+  REASONING
+  Above-average module, clearly refactored with intent. The dispatch-table approach is applied
+  consistently and pays off — cyclomatic complexity stays low and each visitor owns exactly one
+  metric. Naming, decomposition, and function length are all strong. The ceiling is pulled down by a
+  dead parameter in computeBaseFeatures, a recomputed nonEmptyLines, two full-tree walks that could be
+  one, and a few hard-coded scoring weights (0.40/0.35/0.25) that should have been extracted as named
+  constants like OVERRUN_FLOOR_SCORE was. GOOD, not excellent.
+
+  DATASET SAMPLE  → ML-ready
+  score: 3.9  bucket: high
+

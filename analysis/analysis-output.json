@@ -1,0 +1,35 @@
+{
+  "score": 3.9,
+  "verdict": "GOOD",
+  "meta": {
+    "primaryFile": "features.js",
+    "filesReviewed": 6,
+    "originalLines": 745,
+    "cleanedLines": 525,
+    "stack": "Node.js / acorn AST"
+  },
+  "criteria": [
+    { "name": "naming quality",    "pct": 92, "note": "self-documenting names" },
+    { "name": "modularity / srp",  "pct": 87, "note": "one metric per visitor" },
+    { "name": "function length",   "pct": 90, "note": "mostly 5-15 lines" },
+    { "name": "modern js usage",   "pct": 85, "note": "sets, spread, ?. used well" },
+    { "name": "cyclomatic cx",     "pct": 82, "note": "dispatch tables flatten if/else" },
+    { "name": "nesting depth",     "pct": 90, "note": "early returns, max depth 2" },
+    { "name": "error handling",    "pct": 75, "note": "good at boundary, thin inside" },
+    { "name": "purity / effects",  "pct": 68, "note": "visitors mutate shared state" },
+    { "name": "maintainability",   "pct": 72, "note": "dead param + double walk" }
+  ],
+  "strengths": [
+    "Consistent dispatch-table pattern (CONTROL_FLOW_ACTIONS, ERROR_HANDLING_DETECTORS, FUNCTION_LENGTH_RULES, DECLARATION_KIND_COUNTER) keeps visitor cyclomatic complexity at 1-2 everywhere.",
+    "Clear tiered decomposition — buildFeatureVector delegates to computeBaseFeatures / computeAdvancedFeatures / computeStructuralFeatures by feature family (F1-F5, F6-F10, F11-F16), and naming is self-documenting end to end."
+  ],
+  "weaknesses": [
+    "computeBaseFeatures(metrics, topMeta, nonEmptyLines) never uses nonEmptyLines — dead parameter left from a refactor; and extractFeatures computes nonEmptyLines twice (once inside buildFeatureVector, once right after).",
+    "Two separate full-tree AST walks (walk.full in gatherNodeMetrics + walk.ancestor in computeMaxNestingDepth) could be a single pass; measureCallChainDepth uses an awkward Array.from({length}).reduce pattern where a while loop would be clearer."
+  ],
+  "reasoning": "Above-average module, clearly refactored with intent. The dispatch-table approach is applied consistently and pays off — cyclomatic complexity stays low and each visitor owns exactly one metric. Naming, decomposition, and function length are all strong. The ceiling is pulled down by a dead parameter in computeBaseFeatures, a recomputed nonEmptyLines, two full-tree walks that could be one, and a few hard-coded scoring weights (0.40/0.35/0.25) that should have been extracted as named constants like OVERRUN_FLOOR_SCORE was. GOOD, not excellent.",
+  "dataset_sample": {
+    "score": 3.9,
+    "quality_bucket": "high"
+  }
+}

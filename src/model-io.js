@@ -1,116 +1,140 @@
 'use strict';
 
 /**
- * JS-RANKER — Sauvegarde / Chargement de modèle (fs natif)
- * Remplace file:// de tfjs-node, compatible @tensorflow/tfjs pur JS.
- *
- * Format sur disque :
- *   models/js-ranker/
- *     model.json          ← topologie JSON (getConfig + poids metadata)
- *     weights.bin         ← poids sérialisés (ArrayBuffer → Buffer)
- *     training-meta.json  ← méta-données d'entraînement
+ * ╔═══════════════════════════════════════════════════════╗
+ * ║   JS-RANKER — Sauvegarde / Chargement de modèle       ║
+ * ║   Remplace file:// de tfjs-node — fs natif pur JS     ║
+ * ║                                                       ║
+ * ║   Format sur disque :                                 ║
+ * ║     models/js-ranker/                                 ║
+ * ║       model.json     ← topologie + poids metadata     ║
+ * ║       weights.bin    ← poids sérialisés               ║
+ * ║       training-meta.json ← méta-données               ║
+ * ╚═══════════════════════════════════════════════════════╝
  */
 
 const fs   = require('fs');
 const path = require('path');
 const tf   = require('./tf-setup');
 
-// ─────────────────────────────────────────────────────────────────
-//  SAUVEGARDE
-// ─────────────────────────────────────────────────────────────────
+// ── Sauvegarde ───────────────────────────────────────────────────────
 
 /**
- * Sauvegarde un tf.LayersModel sur disque via fs (sans file://).
- * @param {tf.LayersModel} model
- * @param {string} savePath  — dossier de destination (créé si absent)
+ * Sérialise le buffer de poids d'un modèle (ArrayBuffer ou tableau).
+ * Gère les deux formats retournés selon la version de tfjs.
+ *
+ * @param {ArrayBuffer | ArrayBuffer[]} weightData
+ * @returns {Buffer}
+ * @throws {Error} si le format de weightData est inconnu
  */
-async function saveModel(model, savePath) {
-  fs.mkdirSync(savePath, { recursive: true });
+function serializeWeightBuffer(weightData) {
+  if (weightData instanceof ArrayBuffer) {
+    return Buffer.from(weightData);
+  }
 
-  // Handler personnalisé compatible @tensorflow/tfjs pur JS
-  const saveHandler = {
+  if (Array.isArray(weightData)) {
+    const totalBytes = weightData.reduce((sum, buffer) => sum + buffer.byteLength, 0);
+    const outputBuffer = Buffer.alloc(totalBytes);
+    let writeOffset = 0;
+
+    for (const chunk of weightData) {
+      Buffer.from(chunk).copy(outputBuffer, writeOffset);
+      writeOffset += chunk.byteLength;
+    }
+
+    return outputBuffer;
+  }
+
+  throw new Error('Format de poids inattendu — attendu ArrayBuffer ou ArrayBuffer[]');
+}
+
+/**
+ * Construit l'objet JSON de topologie à écrire dans model.json.
+ *
+ * @param {object} modelArtifacts — artefacts fournis par tfjs lors de la sauvegarde
+ * @returns {object}
+ */
+function buildModelJson(modelArtifacts) {
+  return {
+    modelTopology:   modelArtifacts.modelTopology,
+    weightsManifest: [{ paths: ['weights.bin'], weights: modelArtifacts.weightSpecs }],
+    format:          modelArtifacts.format,
+    generatedBy:     modelArtifacts.generatedBy,
+    convertedBy:     modelArtifacts.convertedBy,
+  };
+}
+
+/**
+ * Crée un handler de sauvegarde personnalisé compatible @tensorflow/tfjs pur JS.
+ * Écrit model.json et weights.bin dans `savePath`.
+ *
+ * @param {string} savePath — dossier de destination
+ * @returns {{ save: Function }} handler tfjs
+ */
+function createSaveHandler(savePath) {
+  return {
     save: async (modelArtifacts) => {
-      // 1. Topologie JSON
-      const modelJson = {
-        modelTopology: modelArtifacts.modelTopology,
-        weightsManifest: [{
-          paths: ['weights.bin'],
-          weights: modelArtifacts.weightSpecs,
-        }],
-        format:         modelArtifacts.format,
-        generatedBy:    modelArtifacts.generatedBy,
-        convertedBy:    modelArtifacts.convertedBy,
-      };
-      fs.writeFileSync(
-        path.join(savePath, 'model.json'),
-        JSON.stringify(modelJson, null, 2),
-        'utf-8'
-      );
+      const modelJson    = buildModelJson(modelArtifacts);
+      const weightBuffer = serializeWeightBuffer(modelArtifacts.weightData);
 
-      // 2. Poids binaires
-      // weightData peut être un ArrayBuffer ou un tableau d'ArrayBuffer
-      let weightBuffer;
-      if (modelArtifacts.weightData instanceof ArrayBuffer) {
-        weightBuffer = Buffer.from(modelArtifacts.weightData);
-      } else if (Array.isArray(modelArtifacts.weightData)) {
-        // Concatener tous les ArrayBuffer
-        const totalLen = modelArtifacts.weightData.reduce((s, ab) => s + ab.byteLength, 0);
-        weightBuffer = Buffer.alloc(totalLen);
-        let offset = 0;
-        for (const ab of modelArtifacts.weightData) {
-          Buffer.from(ab).copy(weightBuffer, offset);
-          offset += ab.byteLength;
-        }
-      } else {
-        throw new Error('Format de poids inattendu');
-      }
-
+      fs.writeFileSync(path.join(savePath, 'model.json'), JSON.stringify(modelJson, null, 2), 'utf-8');
       fs.writeFileSync(path.join(savePath, 'weights.bin'), weightBuffer);
 
       return { modelArtifactsInfo: { dateSaved: new Date(), modelTopologyType: 'JSON' } };
-    }
+    },
   };
-
-  await model.save(saveHandler);
 }
 
-// ─────────────────────────────────────────────────────────────────
-//  CHARGEMENT
-// ─────────────────────────────────────────────────────────────────
+/**
+ * Sauvegarde un tf.LayersModel sur disque via fs (sans file://).
+ *
+ * @param {tf.LayersModel} model
+ * @param {string} savePath — dossier de destination (créé si absent)
+ */
+async function saveModel(model, savePath) {
+  fs.mkdirSync(savePath, { recursive: true });
+  await model.save(createSaveHandler(savePath));
+}
+
+// ── Chargement ───────────────────────────────────────────────────────
+
+/**
+ * Construit les artefacts de chargement depuis les fichiers disque.
+ *
+ * @param {string} loadPath — dossier contenant model.json et weights.bin
+ * @returns {object} artefacts compatibles tf.loadLayersModel
+ * @throws {Error} si model.json est absent
+ */
+function readModelArtifacts(loadPath) {
+  const jsonPath    = path.join(loadPath, 'model.json');
+  const weightsPath = path.join(loadPath, 'weights.bin');
+
+  if (!fs.existsSync(jsonPath)) {
+    throw new Error(`Modèle introuvable : ${jsonPath}`);
+  }
+
+  const modelJson  = JSON.parse(fs.readFileSync(jsonPath, 'utf-8'));
+  const weightData = fs.readFileSync(weightsPath);
+
+  return {
+    modelTopology: modelJson.modelTopology,
+    weightSpecs:   modelJson.weightsManifest[0].weights,
+    weightData:    weightData.buffer.slice(weightData.byteOffset, weightData.byteOffset + weightData.byteLength),
+    format:        modelJson.format,
+    generatedBy:   modelJson.generatedBy,
+    convertedBy:   modelJson.convertedBy,
+  };
+}
 
 /**
  * Charge un tf.LayersModel depuis disque via fs (sans file://).
- * @param {string} loadPath  — dossier contenant model.json + weights.bin
+ *
+ * @param {string} loadPath — dossier contenant model.json + weights.bin
  * @returns {Promise<tf.LayersModel>}
  */
 async function loadModel(loadPath) {
-  const modelJsonPath  = path.join(loadPath, 'model.json');
-  const weightsBinPath = path.join(loadPath, 'weights.bin');
-
-  if (!fs.existsSync(modelJsonPath)) {
-    throw new Error(`Modèle introuvable : ${modelJsonPath}`);
-  }
-
-  const modelJson   = JSON.parse(fs.readFileSync(modelJsonPath, 'utf-8'));
-  const weightData  = fs.readFileSync(weightsBinPath);
-
-  // Handler de chargement personnalisé
-  const loadHandler = {
-    load: async () => {
-      return {
-        modelTopology:   modelJson.modelTopology,
-        weightSpecs:     modelJson.weightsManifest[0].weights,
-        weightData:      weightData.buffer.slice(
-                           weightData.byteOffset,
-                           weightData.byteOffset + weightData.byteLength
-                         ),
-        format:          modelJson.format,
-        generatedBy:     modelJson.generatedBy,
-        convertedBy:     modelJson.convertedBy,
-      };
-    }
-  };
-
+  const artifacts = readModelArtifacts(loadPath);
+  const loadHandler = { load: async () => artifacts };
   return tf.loadLayersModel(loadHandler);
 }
 

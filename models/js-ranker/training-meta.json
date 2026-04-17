@@ -1,12 +1,12 @@
 {
-  "trainedAt": "2026-04-14T21:42:50.581Z",
-  "version": "2.1",
-  "epochs": 300,
+  "trainedAt": "2026-04-15T18:18:25.706Z",
+  "version": "4.0",
+  "epochs": 500,
   "samples": 18,
-  "inputDim": 10,
-  "finalLoss": 0.15133851766586304,
-  "finalMae": 0.3149307668209076,
-  "architecture": "10 → Dense(16, relu) → Dropout(0.15) → Dense(8, relu) → Dense(1, linear)",
+  "inputDim": 16,
+  "finalLoss": 0.007477298378944397,
+  "finalMae": 0.038133714348077774,
+  "architecture": "16→Dense(48)→Drop→Dense(24)→Drop→Dense(12)→Dense(1,sigmoid)",
   "features": [
     "cyclomaticComplexity",
     "maxNesting",
@@ -17,6 +17,12 @@
     "returnComplexity",
     "asyncAwait",
     "magicNumbers",
-    "chainLength"
+    "chainLength",
+    "modernSyntax",
+    "constVsVar",
+    "errorHandling",
+    "functionLength",
+    "purityScore",
+    "singleResponsibility"
   ]
 }
