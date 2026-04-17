@@ -171,6 +171,11 @@ function createMetricsState() {
     constCount: 0, letCount: 0, varCount: 0,
     hasTryCatch: false, hasThrowError: false, hasCatchBody: false,
     globalAssignments: 0, paramMutations: 0,
+    // v5.0 — Nouvelles métriques
+    globalScopeDeclarations: 0,  // F11 : variables déclarées hors scope local
+    totalDeclarations: 0,         // F11 : total déclarations pour ratio
+    asyncFunctionCount: 0,        // F12 : fonctions async détectées
+    asyncWithTryCatch: 0,         // F12 : fonctions async avec try/catch
   };
 }
 
@@ -473,7 +478,92 @@ function gatherNodeMetrics(ast, paramNames) {
     visitPurityNode(node, metricsState, paramNames);
   });
 
+  // v5.0 — Collecte des nouvelles métriques étendues via passages dédiés
+  collectGlobalPollutionMetrics(ast, metricsState);
+  collectErrorHandlingDensityMetrics(ast, metricsState);
+
   return metricsState;
+}
+
+// ── v5.0 — F11 Global Pollution ──────────────────────────────────────
+
+/**
+ * F11 (Global Pollution) : calcule le ratio de variables déclarées sans scope local.
+ * Une déclaration est considérée "globale" si elle est enfant direct du Program.
+ * Un ratio élevé indique une pollution de l'espace de noms global.
+ *
+ * @param {acorn.Node} ast
+ * @param {object} metricsState — modifié en place
+ */
+function collectGlobalPollutionMetrics(ast, metricsState) {
+  let globalDeclarations = 0;
+  let totalDeclarations  = 0;
+
+  // Déclarations au niveau racine du Programme (scope global)
+  if (ast.type === 'Program' && Array.isArray(ast.body)) {
+    for (const node of ast.body) {
+      if (node.type === 'VariableDeclaration') {
+        globalDeclarations += node.declarations.length;
+      }
+    }
+  }
+
+  // Total de toutes les déclarations de variables dans l'AST
+  walk.simple(ast, {
+    VariableDeclaration(node) {
+      totalDeclarations += node.declarations.length;
+    },
+  });
+
+  metricsState.globalScopeDeclarations = globalDeclarations;
+  metricsState.totalDeclarations       = totalDeclarations;
+}
+
+// ── v5.0 — F12 Error Handling Density ────────────────────────────────
+
+/**
+ * F12 (Error Handling Density) : ratio de fonctions async encapsulées dans try/catch.
+ * Une valeur élevée indique que le code gère correctement les erreurs asynchrones.
+ *
+ * @param {acorn.Node} ast
+ * @param {object} metricsState — modifié en place
+ */
+function collectErrorHandlingDensityMetrics(ast, metricsState) {
+  let asyncCount        = 0;
+  let asyncWithTryCatch = 0;
+
+  walk.simple(ast, {
+    FunctionDeclaration(node) {
+      if (!node.async) return;
+      asyncCount++;
+      if (containsTryCatch(node.body)) asyncWithTryCatch++;
+    },
+    FunctionExpression(node) {
+      if (!node.async) return;
+      asyncCount++;
+      if (containsTryCatch(node.body)) asyncWithTryCatch++;
+    },
+    ArrowFunctionExpression(node) {
+      if (!node.async) return;
+      asyncCount++;
+      const body = node.body;
+      if (body && body.type === 'BlockStatement' && containsTryCatch(body)) asyncWithTryCatch++;
+    },
+  });
+
+  metricsState.asyncFunctionCount = asyncCount;
+  metricsState.asyncWithTryCatch  = asyncWithTryCatch;
+}
+
+/**
+ * Vérifie si un BlockStatement contient au moins un TryStatement direct.
+ *
+ * @param {acorn.Node} blockNode
+ * @returns {boolean}
+ */
+function containsTryCatch(blockNode) {
+  if (!blockNode || !Array.isArray(blockNode.body)) return false;
+  return blockNode.body.some(stmt => stmt.type === 'TryStatement');
 }
 
 // ── Profondeur d'imbrication ─────────────────────────────────────────
@@ -599,7 +689,18 @@ function computeBaseFeatures(metrics, topMeta, nonEmptyLines) {
   const lineRatio = metrics.nodeCount > 0 ? metrics.totalLines / metrics.nodeCount : 1;
 
   const cyclomaticScore = Math.min(metrics.rawCyclomatic / MAX_CYCLOMATIC, 1.0);
-  const nestingScore    = Math.min(metrics.maxDepth / MAX_NESTING, 1.0);
+
+  // F2 — Normalisation exponentielle : chaque niveau au-delà de 5 est pénalisé lourdement.
+  // Formule : si depth <= 5 → progression linéaire douce ; si depth > 5 → pénalité exponentielle.
+  const NESTING_SOFT_LIMIT = 5;
+  const nestingScore = metrics.maxDepth <= NESTING_SOFT_LIMIT
+    ? Math.min(metrics.maxDepth / MAX_NESTING, 1.0)
+    : Math.min(
+        (NESTING_SOFT_LIMIT / MAX_NESTING) +
+        Math.pow((metrics.maxDepth - NESTING_SOFT_LIMIT) / (MAX_NESTING - NESTING_SOFT_LIMIT), 1.8) *
+        (1 - NESTING_SOFT_LIMIT / MAX_NESTING),
+        1.0
+      );
   const namingScore     = metrics.totalVars > 0 ? metrics.namedVars / metrics.totalVars : 0.5;
   const linearityScore  = Math.max(0, 1 - Math.abs(lineRatio - 1.5) / MAX_LINE_RATIO);
   const modularityScore = Math.max(0, 1 - topMeta.paramCount / MAX_ARGS);
@@ -706,6 +807,21 @@ function buildDetailsObject(metrics, topMeta, features, commentLineCount, nonEmp
     functionLength:       { lines: nonEmptyLines,          normalized: features[13] },
     purityScore:          { globalMutations: metrics.globalAssignments, paramMutations: metrics.paramMutations, normalized: features[14] },
     singleResponsibility: { cyclomaticPerLine: (metrics.rawCyclomatic / (nonEmptyLines || 1)).toFixed(2), normalized: features[15] },
+    // v5.0 — Métriques étendues (hors vecteur modèle, diagnostic uniquement)
+    globalPollution: {
+      globalDeclarations: metrics.globalScopeDeclarations,
+      totalDeclarations:  metrics.totalDeclarations,
+      ratio:              metrics.totalDeclarations > 0
+        ? parseFloat((metrics.globalScopeDeclarations / metrics.totalDeclarations).toFixed(2))
+        : 0,
+    },
+    errorHandlingDensity: {
+      asyncFunctions:   metrics.asyncFunctionCount,
+      asyncWithTryCatch: metrics.asyncWithTryCatch,
+      density:           metrics.asyncFunctionCount > 0
+        ? parseFloat((metrics.asyncWithTryCatch / metrics.asyncFunctionCount).toFixed(2))
+        : null,
+    },
   };
 }
 

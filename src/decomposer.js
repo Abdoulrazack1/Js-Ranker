@@ -576,7 +576,12 @@ function decomposeAndScore(code, scoreFn) {
   for (const fn of functions) {
     try {
       const { features, details } = extractFeatures(fn.slice);
-      scoredFunctions.push({ ...fn, features, details, score: scoreFn(features) });
+      const result = scoreFn(features, details);
+      // scoreFn peut retourner un nombre (mode repo) ou { score, cappedBy, penalty } (mode analyse v5.0)
+      const score    = typeof result === 'object' ? result.score    : result;
+      const cappedBy = typeof result === 'object' ? result.cappedBy : null;
+      const penalty  = typeof result === 'object' ? result.penalty  : 0;
+      scoredFunctions.push({ ...fn, features, details, score, cappedBy, penalty });
     } catch (err) {
       parseErrors.push({ name: fn.name, error: err.message });
     }

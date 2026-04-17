@@ -19,10 +19,92 @@ const {
   displayResult, displayBanner, displayError,
   displayFileReport, displayFetchInfo,
 } = require('./ui');
+const {
+  hasSecurityVeto,
+  getActiveSecurityVeto,
+} = require('./bridge');
 
 const MODEL_PATH = path.join(__dirname, '../models/js-ranker');
 
-// ── Modèle ───────────────────────────────────────────────────────────
+// ── Règles métier strictes (v5.0) ─────────────────────────────────────
+
+/**
+ * Vetos bloquants et pénalités appliqués après la prédiction du modèle.
+ *
+ * Règles actives :
+ *  - Veto sécurité (bridge) : score forcé à 0/5
+ *  - F2 maxNesting > 8      : score plafonné à 2.0/5
+ *  - F1 cyclomaticComplexity > 25 : score plafonné à 2.5/5
+ *  - F9 magicNumbers        : -0.1 par tranche de 20 au-delà de 0
+ *
+ * @param {number} predictedScore — score brut du modèle dans [0..5]
+ * @param {object} features       — features brutes extraites (clés raw)
+ * @param {object} [details]      — objet details complet (pour accès aux raw)
+ * @returns {{ finalScore: number, cappedBy: string|null, penalty: number }}
+ */
+function applyStrictRules(predictedScore, features, details) {
+  let score     = predictedScore;
+  let cappedBy  = null;
+  let penalty   = 0;
+
+  // ── Veto sécurité (SecurityLens bridge) ──────────────────────────
+  if (hasSecurityVeto()) {
+    const veto = getActiveSecurityVeto();
+    return {
+      finalScore: 0,
+      cappedBy:   `SECURITY_VETO:${veto.type} [${veto.source}] — ${veto.detail}`,
+      penalty:    0,
+    };
+  }
+
+  // ── Résolution des valeurs brutes ─────────────────────────────────
+  const rawNesting     = details && details.maxNesting
+    ? details.maxNesting.raw
+    : (features.maxNesting !== undefined ? features.maxNesting : 0);
+  const rawCyclomatic  = details && details.cyclomaticComplexity
+    ? details.cyclomaticComplexity.raw
+    : (features.cyclomaticComplexity !== undefined ? features.cyclomaticComplexity : 0);
+  const rawMagicCount  = details && details.magicNumbers
+    ? details.magicNumbers.count
+    : (features.magicNumbers !== undefined ? features.magicNumbers : 0);
+
+  // ── Veto F2 : imbrication maximale > 8 ───────────────────────────
+  if (rawNesting > 8) {
+    if (score > 2.0) {
+      score    = 2.0;
+      cappedBy = `maxNesting=${rawNesting} > 8 (plafond : 2.0/5)`;
+    }
+  }
+
+  // ── Veto F1 : complexité cyclomatique > 25 ────────────────────────
+  if (rawCyclomatic > 25) {
+    const cap = 2.5;
+    if (score > cap) {
+      score    = cap;
+      cappedBy = cappedBy
+        ? `${cappedBy} + cyclomaticComplexity=${rawCyclomatic} > 25 (plafond : 2.5/5)`
+        : `cyclomaticComplexity=${rawCyclomatic} > 25 (plafond : 2.5/5)`;
+    }
+  }
+
+  // ── Pénalité F9 : magic numbers (-0.1 par tranche de 20) ─────────
+  const MAGIC_TOLERANCE  = 0;
+  const MAGIC_TRANCHE    = 20;
+  const excessMagic      = Math.max(0, rawMagicCount - MAGIC_TOLERANCE);
+  const magicPenalty     = Math.floor(excessMagic / MAGIC_TRANCHE) * 0.1;
+
+  if (magicPenalty > 0) {
+    score   -= magicPenalty;
+    penalty  = magicPenalty;
+    score    = Math.max(0, score);
+  }
+
+  return {
+    finalScore: parseFloat(Math.min(5, score).toFixed(2)),
+    cappedBy,
+    penalty,
+  };
+}
 
 /**
  * Vérifie si le modèle entraîné est présent sur disque.
@@ -63,9 +145,10 @@ async function analyzeSnippet(code) {
   }
 
   const model = await getModel();
-  const score = predict(model, extraction.features);
-  displayResult(score, extraction.details, 'inline snippet');
-  return score;
+  const rawScore = predict(model, extraction.features);
+  const ruled    = applyStrictRules(rawScore, extraction.features, extraction.details);
+  displayResult(ruled.finalScore, extraction.details, 'inline snippet', ruled.cappedBy);
+  return ruled.finalScore;
 }
 
 // ── Analyse d'un fichier local ────────────────────────────────────────
@@ -197,11 +280,15 @@ function computeGlobalRepoScore(fileReports) {
  */
 async function analyzeRepo(fetchResult) {
   const model   = await getModel();
-  const scoreFn = (features) => predict(model, features);
+  const scoreFn = (features, details) => {
+    const rawScore = predict(model, features);
+    const ruled    = applyStrictRules(rawScore, features, details);
+    return ruled.finalScore;
+  };
 
   console.log('');
   console.log(chalk.cyan('  ╔══════════════════════════════════════════════════════╗'));
-  console.log(chalk.cyan('  ║') + chalk.white.bold(`   📦  RAPPORT REPO : ${fetchResult.owner}/${fetchResult.repo}`.padEnd(53)) + chalk.cyan('║'));
+  console.log(chalk.cyan('  ║') + chalk.white.bold(`     RAPPORT REPO : ${fetchResult.owner}/${fetchResult.repo}`.padEnd(53)) + chalk.cyan('║'));
   console.log(chalk.cyan('  ╚══════════════════════════════════════════════════════╝'));
 
   const fileReports = collectRepoFileReports(fetchResult.files, scoreFn);
@@ -296,7 +383,11 @@ function printRepoTable(fileReports, globalScore, repoMeta) {
  */
 async function analyzeCodeFull(sourceCode, displayName) {
   const model   = await getModel();
-  const scoreFn = (features) => predict(model, features);
+  const scoreFn = (features, details) => {
+    const rawScore = predict(model, features);
+    const ruled    = applyStrictRules(rawScore, features, details);
+    return { score: ruled.finalScore, cappedBy: ruled.cappedBy, penalty: ruled.penalty };
+  };
 
   let fileReport;
   try {
@@ -309,7 +400,7 @@ async function analyzeCodeFull(sourceCode, displayName) {
   // Fichier à fonction unique → affichage détaillé de la fonction
   if (fileReport.totalFunctions <= 1 && fileReport.functions.length === 1) {
     const singleFunction = fileReport.functions[0];
-    displayResult(singleFunction.score, singleFunction.details, displayName);
+    displayResult(singleFunction.score, singleFunction.details, displayName, singleFunction.cappedBy || null);
     return singleFunction.score;
   }
 
@@ -332,4 +423,4 @@ async function analyzeAuto(input) {
   return analyzeSnippet(trimmedInput);
 }
 
-module.exports = { analyzeFile, analyzeUrl, analyzeSnippet, analyzeAuto, modelExists };
+module.exports = { analyzeFile, analyzeUrl, analyzeSnippet, analyzeAuto, modelExists, applyStrictRules };

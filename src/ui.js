@@ -198,121 +198,171 @@ function buildRawValueLines(details) {
 }
 
 // ── Conseils de refactoring ──────────────────────────────────────────
+// ── Conseils de refactoring ──────────────────────────────────────────
 
 /**
- * Génère jusqu'à 3 conseils de refactoring priorisés par impact.
+ * Génère un plan d'action hiérarchisé en 3 niveaux de priorité.
+ *
+ * Priorité 1 — Actions correctives sur les points ayant déclenché un Veto.
+ * Priorité 2 — Optimisations structurelles (longueur, complexité, pureté).
+ * Priorité 3 — Qualité de forme (naming, commentaires, syntaxe moderne).
  *
  * @param {number} score
  * @param {object} details
- * @returns {object[]} liste de { msg, tip, priority }
+ * @param {string|null} [cappedBy] — raison du plafonnement si applicable
+ * @returns {object[]} liste de { msg, tip, priority, level }
  */
-function getDetailedAdvice(score, details) {
-  if (score >= 4.5) return [{ msg: 'Code exemplaire. Excellent travail ! 🎉', tip: '' }];
+function getDetailedAdvice(score, details, cappedBy = null) {
+  if (score >= 4.5 && !cappedBy) {
+    return [{ msg: 'Code exemplaire. Excellent travail.', tip: '', level: 0, priority: 0 }];
+  }
 
-  const issues = collectQualityIssues(details, score);
-  issues.sort((a, b) => b.priority - a.priority);
-  return issues.slice(0, 3).length > 0
-    ? issues.slice(0, 3)
-    : [{ msg: 'Code propre. Quelques ajustements mineurs suffiraient.', tip: '' }];
+  const vetoIssues       = collectVetoIssues(details, cappedBy);
+  const structuralIssues = collectStructuralIssues(details, score);
+  const formalIssues     = collectFormalIssues(details, score);
+
+  vetoIssues.sort((a, b) => b.priority - a.priority);
+  structuralIssues.sort((a, b) => b.priority - a.priority);
+  formalIssues.sort((a, b) => b.priority - a.priority);
+
+  const plan = [...vetoIssues, ...structuralIssues, ...formalIssues].slice(0, 4);
+  return plan.length > 0
+    ? plan
+    : [{ msg: 'Code propre. Quelques ajustements mineurs suffiraient.', tip: '', level: 3, priority: 0 }];
 }
 
 /**
- * Collecte toutes les issues de qualité détectées depuis les métriques.
+ * Priorité 1 — Issues liées à un Veto actif (bloquantes pour le score).
+ * Inclut la pollution globale (F11) et la densité de gestion d'erreurs (F12).
+ *
+ * @param {object} details
+ * @param {string|null} cappedBy
+ * @returns {object[]}
+ */
+function collectVetoIssues(details, cappedBy) {
+  const issues = [];
+
+  if (cappedBy) {
+    issues.push({ level: 1, priority: 10,
+      msg: 'Note limitée par règle métier : ' + cappedBy,
+      tip: 'Corriger ce point en priorité absolue pour débloquer le score.' });
+  }
+  if (details.maxNesting && details.maxNesting.raw > 8) {
+    issues.push({ level: 1, priority: 9,
+      msg: "Extract function — aplatir l'imbrication (veto > 8 niveaux)",
+      tip: `profondeur actuelle : ${details.maxNesting.raw} (seuil bloquant : 8)` });
+  }
+  if (details.cyclomaticComplexity && details.cyclomaticComplexity.raw > 25) {
+    issues.push({ level: 1, priority: 8.5,
+      msg: 'Guard clauses — réduire la complexité cyclomatique (veto > 25)',
+      tip: `${details.cyclomaticComplexity.raw} branches logiques (seuil bloquant : 25)` });
+  }
+  if (details.globalPollution && details.globalPollution.ratio > 0.5) {
+    issues.push({ level: 1, priority: 7,
+      msg: 'Encapsuler les déclarations globales dans des modules ou fonctions',
+      tip: `${details.globalPollution.globalDeclarations}/${details.globalPollution.totalDeclarations} variables en portée globale` });
+  }
+  if (details.errorHandlingDensity && details.errorHandlingDensity.asyncFunctions > 0
+      && details.errorHandlingDensity.density !== null && details.errorHandlingDensity.density < 0.5) {
+    issues.push({ level: 1, priority: 6.5,
+      msg: 'Ajouter try/catch dans les fonctions async',
+      tip: `${details.errorHandlingDensity.asyncWithTryCatch}/${details.errorHandlingDensity.asyncFunctions} fonctions async protégées` });
+  }
+  return issues;
+}
+
+/**
+ * Priorité 2 — Optimisations structurelles.
+ * Complexité sous-critique, modularité, pureté, SRP, points de sortie.
  *
  * @param {object} details
  * @param {number} score
  * @returns {object[]}
  */
-function collectQualityIssues(details, score) {
+function collectStructuralIssues(details, score) {
   const issues = [];
 
-  // F1 — Complexité cyclomatique
-  if (details.cyclomaticComplexity.normalized > 0.4) {
-    issues.push({ priority: details.cyclomaticComplexity.normalized,
-      msg: 'Guard clauses → réduire la complexité cyclomatique',
+  if (details.cyclomaticComplexity && details.cyclomaticComplexity.normalized > 0.4
+      && details.cyclomaticComplexity.raw <= 25) {
+    issues.push({ level: 2, priority: details.cyclomaticComplexity.normalized,
+      msg: 'Guard clauses — réduire la complexité cyclomatique',
       tip: `${details.cyclomaticComplexity.raw} branches logiques` });
   }
-
-  // F2 — Imbrication
-  if (details.maxNesting.normalized > 0.4) {
-    issues.push({ priority: details.maxNesting.normalized,
-      msg: 'Extract function → aplatir l\'imbrication',
+  if (details.maxNesting && details.maxNesting.normalized > 0.4 && details.maxNesting.raw <= 8) {
+    issues.push({ level: 2, priority: details.maxNesting.normalized,
+      msg: "Extract function — aplatir l'imbrication",
       tip: `profondeur ${details.maxNesting.raw}` });
   }
-
-  // F3 — Nommage
-  if (details.namingRatio.normalized < 0.6) {
-    issues.push({ priority: 1 - details.namingRatio.normalized,
-      msg: 'Nommage explicite → renommer les variables courtes',
-      tip: `${details.namingRatio.named}/${details.namingRatio.total} bien nommées` });
+  if (details.modularity && details.modularity.normalized < 0.5) {
+    issues.push({ level: 2, priority: 1 - details.modularity.normalized,
+      msg: "Objet options — réduire le nombre d'arguments",
+      tip: `${details.modularity.params} paramètres (idéal <= 3)` });
   }
-
-  // F5 — Modularité
-  if (details.modularity.normalized < 0.5) {
-    issues.push({ priority: 1 - details.modularity.normalized,
-      msg: 'Objet options → réduire le nombre d\'arguments',
-      tip: `${details.modularity.params} paramètres (idéal ≤ 3)` });
-  }
-
-  // F6 — Commentaires
-  if (details.commentRatio.normalized < 0.1 && score < 3.5) {
-    issues.push({ priority: 0.5,
-      msg: 'JSDoc → documenter paramètres et valeurs de retour',
-      tip: `0 commentaires / ${details.commentRatio.lines} lignes` });
-  }
-
-  // F9 — Nombres magiques
-  if (details.magicNumbers.normalized > 0.3) {
-    issues.push({ priority: details.magicNumbers.normalized * 0.85,
-      msg: 'Constantes nommées → remplacer les nombres magiques',
-      tip: `${details.magicNumbers.count} littéraux numériques` });
-  }
-
-  // F7 — Trop de returns
-  if (details.returnComplexity.normalized > 0.6) {
-    issues.push({ priority: details.returnComplexity.normalized * 0.9,
-      msg: 'Unifier les return → réduire les points de sortie',
-      tip: `${details.returnComplexity.count} return statements` });
-  }
-
-  // F11 — Syntaxe moderne
-  if (details.modernSyntax && details.modernSyntax.normalized < 0.2 && score < 3.0) {
-    issues.push({ priority: 0.45,
-      msg: 'Moderniser → destructuring, template literals, spread',
-      tip: `Seulement ${details.modernSyntax.patterns} patterns ES6+ détectés` });
-  }
-
-  // F12 — const vs var
-  if (details.constVsVar && details.constVsVar.normalized < 0.4) {
-    issues.push({ priority: 0.55,
-      msg: 'Préférer const/let → éliminer les var',
-      tip: `${details.constVsVar.var} var détectés` });
-  }
-
-  // F15 — Pureté
   if (details.purityScore && details.purityScore.normalized < 0.6) {
-    issues.push({ priority: 0.7,
-      msg: 'Fonctions pures → éviter les mutations de paramètres',
+    issues.push({ level: 2, priority: 0.7,
+      msg: 'Fonctions pures — éviter les mutations de paramètres',
       tip: `${details.purityScore.globalMutations} mutations globales` });
   }
-
-  // F16 — SRP
   if (details.singleResponsibility && details.singleResponsibility.normalized < 0.4) {
-    issues.push({ priority: 0.65,
-      msg: 'Single Responsibility → décomposer cette fonction',
+    issues.push({ level: 2, priority: 0.65,
+      msg: 'Single Responsibility — décomposer cette fonction',
       tip: `${details.singleResponsibility.cyclomaticPerLine} branches/ligne (trop dense)` });
   }
-
+  if (details.returnComplexity && details.returnComplexity.normalized > 0.6) {
+    issues.push({ level: 2, priority: details.returnComplexity.normalized * 0.9,
+      msg: 'Unifier les return — réduire les points de sortie',
+      tip: `${details.returnComplexity.count} return statements` });
+  }
   return issues;
 }
 
 /**
- * Retourne le conseil principal (usage simple, 1 ligne).
+ * Priorité 3 — Qualité de forme.
+ * Nommage, commentaires, syntaxe moderne, const/var, nombres magiques.
  *
- * @param {number} score
  * @param {object} details
- * @returns {string}
+ * @param {number} score
+ * @returns {object[]}
  */
+function collectFormalIssues(details, score) {
+  const issues = [];
+
+  if (details.namingRatio && details.namingRatio.normalized < 0.6) {
+    issues.push({ level: 3, priority: 1 - details.namingRatio.normalized,
+      msg: 'Nommage explicite — renommer les variables courtes',
+      tip: `${details.namingRatio.named}/${details.namingRatio.total} bien nommées` });
+  }
+  if (details.commentRatio && details.commentRatio.normalized < 0.1 && score < 3.5) {
+    issues.push({ level: 3, priority: 0.5,
+      msg: 'JSDoc — documenter paramètres et valeurs de retour',
+      tip: `0 commentaires / ${details.commentRatio.lines} lignes` });
+  }
+  if (details.magicNumbers && details.magicNumbers.normalized > 0.3) {
+    issues.push({ level: 3, priority: details.magicNumbers.normalized * 0.85,
+      msg: 'Constantes nommées — remplacer les nombres magiques',
+      tip: `${details.magicNumbers.count} littéraux numériques` });
+  }
+  if (details.modernSyntax && details.modernSyntax.normalized < 0.2 && score < 3.0) {
+    issues.push({ level: 3, priority: 0.45,
+      msg: 'Moderniser — destructuring, template literals, spread',
+      tip: `Seulement ${details.modernSyntax.patterns} patterns ES6+ détectés` });
+  }
+  if (details.constVsVar && details.constVsVar.normalized < 0.4) {
+    issues.push({ level: 3, priority: 0.55,
+      msg: 'Preferer const/let — eliminer les var',
+      tip: `${details.constVsVar.var} var détectés` });
+  }
+  return issues;
+}
+
+/**
+ * Collecte toutes les issues (compatibilité ascendante).
+ * @deprecated Utiliser getDetailedAdvice() directement.
+ */
+function collectQualityIssues(details, score) {
+  return [...collectVetoIssues(details, null), ...collectStructuralIssues(details, score), ...collectFormalIssues(details, score)];
+}
+
 function getAdvice(score, details) {
   const advices = getDetailedAdvice(score, details);
   const top     = advices[0];
@@ -328,16 +378,21 @@ function getAdvice(score, details) {
  * @param {object} details — objet details de extractFeatures
  * @param {string} [filename='fonction']
  */
-function displayResult(score, details, filename = 'fonction') {
+function displayResult(score, details, filename = 'fonction', cappedBy = null) {
   const colorize = getColorForScore(score);
   const verdict  = getVerdict(score);
   const width    = 52;
 
   console.log('');
   console.log(colorize(`  ┌${'─'.repeat(width)}┐`));
-  console.log(colorize('  │') + chalk.white.bold('  🧠  JS-RANKER — Analyse Complète'.padEnd(width)) + colorize('│'));
+  console.log(colorize('  │') + chalk.white.bold('    JS-RANKER — Analyse Complète'.padEnd(width)) + colorize('│'));
   console.log(colorize(`  ├${'─'.repeat(width)}┤`));
   console.log(colorize('  │') + chalk.gray(`  Fichier : ${filename}`.padEnd(width)) + colorize('│'));
+  if (cappedBy) {
+    console.log(colorize(`  ├${'─'.repeat(width)}┤`));
+    const capMsg = `  Note limitée par règle métier : ${cappedBy}`;
+    console.log(colorize('  │') + chalk.hex('#FF6B6B').bold(capMsg.substring(0, width).padEnd(width)) + colorize('│'));
+  }
   console.log(colorize(`  ├${'─'.repeat(width)}┤`));
 
   // Score & barre
@@ -378,8 +433,9 @@ function displayResult(score, details, filename = 'fonction') {
   console.log(colorize('  │') + chalk.white.bold('  Conseils de Refactoring'.padEnd(width)) + colorize('│'));
   console.log(colorize(`  ├${'─'.repeat(width)}┤`));
 
-  const advices = getDetailedAdvice(score, details);
+  const advices = getDetailedAdvice(score, details, cappedBy);
   const icons   = ['🔧', '💡', '📌'];
+  const levelLabels = { 1: '[P1]', 2: '[P2]', 3: '[P3]' };
   for (const [idx, adv] of advices.entries()) {
     const prefix = `  ${icons[idx] || '•'} ${adv.msg}`;
     console.log(colorize('  │') + chalk.gray(prefix.substring(0, width).padEnd(width)) + colorize('│'));
@@ -401,7 +457,7 @@ function displayResult(score, details, filename = 'fonction') {
 function displayBanner() {
   console.log('');
   console.log(chalk.cyan('  ╔══════════════════════════════════════════════╗'));
-  console.log(chalk.cyan('  ║') + chalk.white.bold('     ⚡  JS-RANKER  v2.0  — Zen Console       ') + chalk.cyan('║'));
+  console.log(chalk.cyan('  ║') + chalk.white.bold('       JS-RANKER  v2.0  — Zen Console       ') + chalk.cyan('║'));
   console.log(chalk.cyan('  ║') + chalk.gray('   16 métriques AST — Notation ML de JS       ') + chalk.cyan('║'));
   console.log(chalk.cyan('  ╚══════════════════════════════════════════════╝'));
   console.log('');
@@ -415,7 +471,7 @@ function displayBanner() {
 function displayError(message) {
   console.log('');
   console.log(chalk.red('  ┌──────────────────────────────────────┐'));
-  console.log(chalk.red('  │') + chalk.white.bold('  ❌  ERREUR                          ') + chalk.red('│'));
+  console.log(chalk.red('  │') + chalk.white.bold('    ERREUR                          ') + chalk.red('│'));
   console.log(chalk.red('  ├──────────────────────────────────────┤'));
   console.log(chalk.red('  │') + chalk.gray(`  ${message.substring(0, 36).padEnd(36)}`) + chalk.red('│'));
   console.log(chalk.red('  └──────────────────────────────────────┘'));
@@ -453,7 +509,7 @@ function displayFileReport(report, filename = 'fichier') {
 
   console.log('');
   console.log(colorize(`  ┌${'─'.repeat(width)}┐`));
-  console.log(colorize('  │') + chalk.white.bold('  📊  RAPPORT FICHIER COMPLET'.padEnd(width)) + colorize('│'));
+  console.log(colorize('  │') + chalk.white.bold('    RAPPORT FICHIER COMPLET'.padEnd(width)) + colorize('│'));
   console.log(colorize(`  ├${'─'.repeat(width)}┤`));
   console.log(colorize('  │') + chalk.gray(`  ${filename}`.padEnd(width)) + colorize('│'));
   console.log(colorize(`  ├${'─'.repeat(width)}┤`));
