@@ -1,4 +1,4 @@
-# 🧠 JS-Ranker v2.1
+#  JS-Ranker
 
 > Moteur de notation ML pour fonctions JavaScript — 10 features AST, API REST, Quality Gate CI/CD
 
