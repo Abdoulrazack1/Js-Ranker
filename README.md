@@ -10,11 +10,12 @@
 [![CLI](https://img.shields.io/badge/CLI-Ready-2E7D32)](https://github.com/Abdoulrazack1/Js-Ranker)
 [![License](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
 
-<!-- 📽️ GIF à ajouter ici : 15s montrant
-     1) `node index.js examples/messy.js` → score 32/100 + breakdown features
-     2) `node index.js examples/clean.js` → score 87/100
-     3) curl POST /analyze avec snippet → JSON response
-     4) GitHub Action qui FAIL sur PR avec score < 60 -->
+## 📊 Exemple — perfect.js vs spaghetti.js (sortie réelle CLI)
+
+[![Js-Ranker — Side by side: perfect.js (4.7/5 EXCELLENT) vs spaghetti.js (0.7/5 CRITICAL)](screenshots/comparison.png)](screenshots/comparison.png)
+
+> Comparaison réelle générée par `node index.js analyze examples/{perfect,spaghetti}.js`.
+> 9 critères évalués (Naming, Modularity, Function length, Modern JS, Cyclomatic, Nesting, Error handling, Purity, Maintainability) avec score 0-5 et verdict.
 
 ---
 
